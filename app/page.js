@@ -18,6 +18,7 @@ const EMPTY_FORM = { afiliado: '', plataforma: 'Instagram', formato: 'Story', da
 
 export default function Dashboard() {
   const [entries, setEntries] = useState([])
+  const [afiliados, setAfiliados] = useState([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState(EMPTY_FORM)
@@ -27,7 +28,13 @@ export default function Dashboard() {
 
   useEffect(() => {
     fetchEntries()
+    fetchAfiliados()
   }, [])
+
+  async function fetchAfiliados() {
+    const { data } = await supabase.from('afiliados').select('nome').order('nome')
+    if (data) setAfiliados(data.map(a => a.nome))
+  }
 
   async function fetchEntries() {
     setLoading(true)
@@ -156,13 +163,15 @@ export default function Dashboard() {
           <form onSubmit={handleSubmit} className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
             <div>
               <label className="block text-xs text-gray-500 mb-1">Afiliado *</label>
-              <input
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
-                placeholder="Nome do afiliado"
+              <select
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white"
                 value={form.afiliado}
                 onChange={e => setForm(f => ({ ...f, afiliado: e.target.value }))}
                 required
-              />
+              >
+                <option value="">Selecione...</option>
+                {afiliados.map(nome => <option key={nome}>{nome}</option>)}
+              </select>
             </div>
             <div>
               <label className="block text-xs text-gray-500 mb-1">Plataforma</label>
