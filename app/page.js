@@ -1,6 +1,7 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import supabase from '../lib/supabase'
 
 const PLATAFORMAS = ['Instagram', 'TikTok', 'Telegram', 'YouTube', 'Twitch', 'Discord', 'Threads']
 const FORMATOS = ['Story', 'Reels', 'Feed', 'Banner', 'Livestream', 'Podcast']
@@ -13,20 +14,31 @@ const STATUS_COLORS = {
   Reprovado: 'bg-red-100 text-red-800',
 }
 
-const INITIAL_ENTRIES = [
-  { id: 1, afiliado: 'João Silva', plataforma: 'Instagram', formato: 'Story', data: '2026-05-01', status: 'Auditado', link: '' },
-  { id: 2, afiliado: 'Maria Costa', plataforma: 'TikTok', formato: 'Reels', data: '2026-05-05', status: 'Entregue', link: '' },
-  { id: 3, afiliado: 'Pedro Lopes', plataforma: 'YouTube', formato: 'Livestream', data: '2026-05-10', status: 'Pendente', link: '' },
-]
-
 const EMPTY_FORM = { afiliado: '', plataforma: 'Instagram', formato: 'Story', data: '', status: 'Pendente', link: '' }
 
 export default function Dashboard() {
-  const [entries, setEntries] = useState(INITIAL_ENTRIES)
+  const [entries, setEntries] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
   const [form, setForm] = useState(EMPTY_FORM)
   const [showForm, setShowForm] = useState(false)
   const [filters, setFilters] = useState({ plataforma: '', formato: '', status: '' })
   const [editId, setEditId] = useState(null)
+
+  useEffect(() => {
+    fetchEntries()
+  }, [])
+
+  async function fetchEntries() {
+    setLoading(true)
+    const { data, error } = await supabase
+      .from('entregas')
+      .select('*')
+      .order('created_at', { ascending: false })
+
+    if (!error) setEntries(data)
+    setLoading(false)
+  }
 
   const filtered = entries.filter(e =>
     (!filters.plataforma || e.plataforma === filters.plataforma) &&
@@ -34,28 +46,33 @@ export default function Dashboard() {
     (!filters.status || e.status === filters.status)
   )
 
-  function handleSubmit(e) {
+  async function handleSubmit(e) {
     e.preventDefault()
     if (!form.afiliado || !form.data) return
+    setSaving(true)
 
     if (editId !== null) {
-      setEntries(prev => prev.map(entry => entry.id === editId ? { ...form, id: editId } : entry))
+      await supabase.from('entregas').update(form).eq('id', editId)
       setEditId(null)
     } else {
-      setEntries(prev => [...prev, { ...form, id: Date.now() }])
+      await supabase.from('entregas').insert(form)
     }
+
     setForm(EMPTY_FORM)
     setShowForm(false)
+    setSaving(false)
+    fetchEntries()
   }
 
   function handleEdit(entry) {
-    setForm({ afiliado: entry.afiliado, plataforma: entry.plataforma, formato: entry.formato, data: entry.data, status: entry.status, link: entry.link })
+    setForm({ afiliado: entry.afiliado, plataforma: entry.plataforma, formato: entry.formato, data: entry.data, status: entry.status, link: entry.link || '' })
     setEditId(entry.id)
     setShowForm(true)
   }
 
-  function handleDelete(id) {
-    setEntries(prev => prev.filter(e => e.id !== id))
+  async function handleDelete(id) {
+    await supabase.from('entregas').delete().eq('id', id)
+    fetchEntries()
   }
 
   function handleCancel() {
@@ -200,8 +217,12 @@ export default function Dashboard() {
               <button type="button" onClick={handleCancel} className="px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 transition">
                 Cancelar
               </button>
-              <button type="submit" className="px-4 py-2 text-sm bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition font-medium">
-                {editId !== null ? 'Salvar alterações' : 'Adicionar'}
+              <button
+                type="submit"
+                disabled={saving}
+                className="px-4 py-2 text-sm bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-lg transition font-medium"
+              >
+                {saving ? 'Salvando...' : editId !== null ? 'Salvar alterações' : 'Adicionar'}
               </button>
             </div>
           </form>
@@ -223,12 +244,17 @@ export default function Dashboard() {
             </tr>
           </thead>
           <tbody>
-            {filtered.length === 0 && (
+            {loading && (
+              <tr>
+                <td colSpan={7} className="text-center py-10 text-gray-400">Carregando...</td>
+              </tr>
+            )}
+            {!loading && filtered.length === 0 && (
               <tr>
                 <td colSpan={7} className="text-center py-10 text-gray-400">Nenhuma entrega encontrada.</td>
               </tr>
             )}
-            {filtered.map(entry => (
+            {!loading && filtered.map(entry => (
               <tr key={entry.id} className="border-b border-gray-50 hover:bg-gray-50 transition">
                 <td className="px-4 py-3 font-medium text-gray-800">{entry.afiliado}</td>
                 <td className="px-4 py-3 text-gray-600">{entry.plataforma}</td>
@@ -241,7 +267,7 @@ export default function Dashboard() {
                 </td>
                 <td className="px-4 py-3">
                   {entry.link
-                    ? <a href={entry.link} target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:underline truncate max-w-[120px] block">Ver</a>
+                    ? <a href={entry.link} target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:underline">Ver</a>
                     : <span className="text-gray-300">—</span>
                   }
                 </td>
